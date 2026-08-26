@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Blink.Blink · Frequência Robótica</title>
+
+  <link rel="stylesheet" href="style.css">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+</head>
+<body>
+
+  <!-- TELA DE LOGIN -->
+  <div id="login" class="login-tela">
+    <div class="login-glow"></div>
+    <div class="login-box">
+      <div class="robo"><span class="olho"></span><span class="olho"></span></div>
+      <h1 class="marca">Blink<span>.</span>Blink</h1>
+      <div class="marca-linha">Sistema de Frequência · Robótica</div>
+
+      <div id="loginEscolha">
+        <p class="login-sub">Como você quer entrar?</p>
+        <button class="btn-login aluno" id="entrarAluno">
+          <span class="ico">👥</span>
+          <span><b>Entrar como aluno</b><small>Marcar a chamada do dia</small></span>
+        </button>
+        <button class="btn-login prof" id="irProfessor">
+          <span class="ico">🔑</span>
+          <span><b>Entrar como professor</b><small>Gerenciar turmas e dados</small></span>
+        </button>
+      </div>
+
+      <div id="loginSenha" style="display:none">
+        <p class="login-sub">Acesso do professor</p>
+        <div class="campo">
+          <label>Senha</label>
+          <div class="campo-senha">
+            <input type="password" id="senhaProf" placeholder="Digite a senha" autocomplete="off">
+            <button type="button" id="verSenha" title="Mostrar/ocultar">👁️</button>
+          </div>
+        </div>
+        <button class="btn-entrar" id="confirmaProf">Entrar</button>
+        <button class="voltar-login" id="voltarLogin">← Voltar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- SISTEMA -->
+  <div id="app" style="display:none">
+    <header>
+      <div class="head-row">
+        <div class="logo">
+          <div class="chip">🤖</div>
+          <div>
+            <h1>Blink.Blink</h1>
+            <p>Robótica</p>
+          </div>
+        </div>
+        <span id="crachaPapel" class="cracha"></span>
+        <button class="head-btn" id="btnExcel">Baixar Excel</button>
+        <button class="head-btn" id="btnBackup">Backup</button>
+        <button class="head-btn" id="btnRestaurar">Restaurar</button>
+        <button class="head-btn" id="btnSair">Sair</button>
+        <input type="file" id="arquivoRestaurar" accept=".json" style="display:none">
+      </div>
+    </header>
+
+    <nav class="tabs">
+      <div class="tabs-inner" id="tabs"></div>
+    </nav>
+
+    <main id="view"></main>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <!-- MODAL DE TEXTO -->
+  <div class="modal-fundo" id="modalFundo">
+    <div class="modal">
+      <h3 id="modalTitulo">Título</h3>
+      <p id="modalTexto">Descrição</p>
+      <input type="text" id="modalInput" autocomplete="off">
+      <div class="modal-botoes">
+        <button class="btn" onclick="fecharModal()">Cancelar</button>
+        <button class="btn primary" onclick="confirmarModal()">Salvar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL DE CONFIRMAÇÃO -->
+  <div class="modal-fundo" id="confFundo">
+    <div class="modal">
+      <h3 id="confTitulo">Confirmar</h3>
+      <p id="confTexto" style="margin-bottom:20px">Tem certeza?</p>
+      <div class="modal-botoes">
+        <button class="btn" onclick="fecharConfirmacao()">Cancelar</button>
+        <button class="btn primary" id="confOk" onclick="confirmarAcao()">Confirmar</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
