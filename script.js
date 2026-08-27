@@ -1,28 +1,57 @@
 /* ============================================================
-   BLINK.BLINK — CÉREBRO DO SISTEMA
+   BLINK.BLINK — CÉREBRO (Firebase: 2 gavetas + login real)
 ============================================================ */
 
-/* >>> SENHAS — troque pelo que quiser <<< */
-var SENHA_PROFESSOR = 'ShaylloNTE.3';
-var SENHA_BACKUP    = 'ShaylloNTE.3';
+/* ---------- CONEXÃO ---------- */
+var firebaseConfig = {
+  apiKey: "AIzaSyCPzp6nH0tuLsBo4wQgcPFRbmWrhTUJNag",
+  authDomain: "blink-blink-a9cd0.firebaseapp.com",
+  databaseURL: "https://blink-blink-a9cd0-default-rtdb.firebaseio.com",
+  projectId: "blink-blink-a9cd0",
+  storageBucket: "blink-blink-a9cd0.firebasestorage.app",
+  messagingSenderId: "736350140419",
+  appId: "1:736350140419:web:5994e3bfc56bb9457ef636"
+};
+firebase.initializeApp(firebaseConfig);
+var auth = firebase.auth();
+var refEstrutura = firebase.database().ref('estrutura');   // turmas + alunos (só professor escreve)
+var refChamadas  = firebase.database().ref('chamadas');    // presenças (todos escrevem)
 
-var papel = null;   // 'aluno' ou 'professor'
-
-/* 1) DADOS */
-var memoria = null;
-function carregar(){
-  try{ var s=localStorage.getItem('freqRobotica'); return s?JSON.parse(s):{turmas:[],sessoes:{}}; }
-  catch(e){ return memoria || {turmas:[],sessoes:{}}; }
-}
-function salvar(){
-  try{ localStorage.setItem('freqRobotica', JSON.stringify(db)); }
-  catch(e){ memoria=db; if(!salvar.jaAvisou){ salvar.jaAvisou=true; aviso('Seu navegador está bloqueando o salvamento. Funciona agora, mas pode não lembrar ao fechar.'); } }
-}
-var db = carregar();
+var papel = null;
+var db = { turmas:[], sessoes:{} };   // "turmas" vem da estrutura; "sessoes" vem das chamadas
 var abaAtiva = 'painel';
 var dataAtual = hojeISO();
+var carregouEstrutura = false, carregouChamadas = false;
 
-/* 2) FERRAMENTAS */
+/* ---------- SALVAR / CARREGAR (nas 2 gavetas) ---------- */
+function salvarEstrutura(){ refEstrutura.set(db.turmas); }   // usado nas ações de professor
+function salvarChamadas(){ refChamadas.set(db.sessoes); }    // usado ao marcar presença
+
+function ligarSincronizacao(){
+  // gaveta 1: turmas e alunos
+  refEstrutura.on('value', function(snap){
+    var t = snap.val() || [];
+    t = t.filter(function(x){ return x; });
+    t.forEach(function(turma){
+      if(!turma.alunos) turma.alunos = [];
+      turma.alunos = turma.alunos.filter(function(a){ return a; });
+    });
+    db.turmas = t;
+    carregouEstrutura = true;
+    if(papel) desenhar();
+  }, function(){ aviso('Erro ao ler turmas da nuvem.'); });
+
+  // gaveta 2: chamadas / presenças
+  refChamadas.on('value', function(snap){
+    var s = snap.val() || {};
+    Object.keys(s).forEach(function(k){ if(!s[k].presencas) s[k].presencas = {}; });
+    db.sessoes = s;
+    carregouChamadas = true;
+    if(papel) desenhar();
+  }, function(){ aviso('Erro ao ler chamadas da nuvem.'); });
+}
+
+/* ---------- FERRAMENTAS ---------- */
 var DIAS = ['Domingo','Segunda-feira','Terça-feira','Quarta-feira','Quinta-feira','Sexta-feira','Sábado'];
 function novoId(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,6); }
 function hojeISO(){ var d=new Date(); d.setMinutes(d.getMinutes()-d.getTimezoneOffset()); return d.toISOString().slice(0,10); }
@@ -37,7 +66,7 @@ function ehProfessor(){ return papel==='professor'; }
 function chaveSessao(t,d){ return t+'|'+d; }
 function pegarSessao(t,d){ return db.sessoes[chaveSessao(t,d)] || {tipo:'aula',motivo:'',presencas:{},concluida:false}; }
 
-/* 3) LOGIN */
+/* ---------- LOGIN ---------- */
 function entrarComo(novoPapel){
   papel = novoPapel;
   document.getElementById('login').style.display='none';
@@ -51,6 +80,7 @@ function entrarComo(novoPapel){
   abaAtiva='painel'; desenhar();
 }
 function sair(){
+  if(ehProfessor()) auth.signOut();   // desloga do Firebase
   papel=null; abaAtiva='painel';
   document.getElementById('app').style.display='none';
   document.getElementById('login').style.display='flex';
@@ -60,15 +90,21 @@ function mostrarEscolha(){
   document.getElementById('loginEscolha').style.display='block';
   document.getElementById('loginSenha').style.display='none';
   document.getElementById('senhaProf').value='';
+  document.getElementById('emailProf').value='';
 }
 function mostrarSenha(){
   document.getElementById('loginEscolha').style.display='none';
   document.getElementById('loginSenha').style.display='block';
-  document.getElementById('senhaProf').focus();
+  document.getElementById('emailProf').focus();
 }
+/* agora o professor entra com login REAL do Firebase */
 function tentarProfessor(){
-  if(document.getElementById('senhaProf').value === SENHA_PROFESSOR){ entrarComo('professor'); }
-  else{ aviso('Senha incorreta.'); }
+  var email = document.getElementById('emailProf').value.trim();
+  var senha = document.getElementById('senhaProf').value;
+  if(!email || !senha){ aviso('Preencha e-mail e senha.'); return; }
+  auth.signInWithEmailAndPassword(email, senha)
+    .then(function(){ entrarComo('professor'); })
+    .catch(function(){ aviso('E-mail ou senha incorretos.'); });
 }
 aoTocar(document.getElementById('entrarAluno'), function(){ entrarComo('aluno'); });
 aoTocar(document.getElementById('irProfessor'), mostrarSenha);
@@ -79,14 +115,13 @@ document.getElementById('verSenha').addEventListener('click', function(){
   var i = document.getElementById('senhaProf');
   var mostrando = i.type === 'password';
   i.type = mostrando ? 'text' : 'password';
-  // troca o desenho: olho aberto <-> olho cortado
   var svg = document.getElementById('iconeOlho');
   svg.innerHTML = mostrando
     ? '<path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c6.5 0 10 8 10 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><path d="M1 1l22 22"/><path d="M6.61 6.61A13.5 13.5 0 0 0 2 12s3.5 8 10 8a9.7 9.7 0 0 0 5.39-1.61"/>'
     : '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/>';
 });
 
-/* 4) MODAL DE TEXTO */
+/* ---------- MODAL DE TEXTO ---------- */
 var acaoDoModal=null;
 function abrirModal(titulo, texto, aoConfirmar, valorInicial, ehSenha){
   document.getElementById('modalTitulo').textContent=titulo;
@@ -100,7 +135,7 @@ function fecharModal(){ document.getElementById('modalFundo').classList.remove('
 function confirmarModal(){ var t=document.getElementById('modalInput').value.trim(); if(acaoDoModal){acaoDoModal(t);} fecharModal(); }
 document.getElementById('modalInput').addEventListener('keydown', function(e){ if(e.key==='Enter')confirmarModal(); if(e.key==='Escape')fecharModal(); });
 
-/* 4b) MODAL DE CONFIRMAÇÃO */
+/* ---------- MODAL DE CONFIRMAÇÃO ---------- */
 var acaoConfirmar=null;
 function pedirConfirmacao(titulo, texto, aoConfirmar, textoBotao){
   document.getElementById('confTitulo').textContent=titulo;
@@ -112,7 +147,7 @@ function pedirConfirmacao(titulo, texto, aoConfirmar, textoBotao){
 function fecharConfirmacao(){ document.getElementById('confFundo').classList.remove('aberto'); acaoConfirmar=null; }
 function confirmarAcao(){ var fn=acaoConfirmar; fecharConfirmacao(); if(fn) fn(); }
 
-/* 5) ABAS */
+/* ---------- ABAS ---------- */
 function desenharAbas(){
   var barra=document.getElementById('tabs'); barra.innerHTML='';
   barra.appendChild(criarAba('painel','📊 Painel'));
@@ -127,10 +162,11 @@ function criarAba(id, texto){
   aoTocar(b, function(){ abaAtiva=id; desenhar(); }); return b;
 }
 
-/* 6) DESENHAR */
+/* ---------- DESENHAR ---------- */
 function desenhar(){
   desenharAbas();
   var tela=document.getElementById('view'); tela.innerHTML='';
+  if(!carregouEstrutura || !carregouChamadas){ tela.innerHTML='<div class="panel" style="text-align:center;color:var(--muted)">Carregando dados da nuvem…</div>'; return; }
   if(abaAtiva==='painel'){ desenharPainel(tela); return; }
   var turma=db.turmas.find(function(t){ return t.id===abaAtiva; });
   if(!turma){ abaAtiva='painel'; return desenhar(); }
@@ -186,7 +222,7 @@ function cardNum(n,l){ return '<div class="card"><div class="big">'+n+'</div><di
 
 function estatisticas(){
   var totalAlunos=0, diasAula=0, presencasTot=0, ocasioesTot=0, alunos=[], diasSemAula=[];
-  db.turmas.forEach(function(t){ totalAlunos+=t.alunos.length; });
+  db.turmas.forEach(function(t){ totalAlunos+=(t.alunos?t.alunos.length:0); });
   Object.keys(db.sessoes).forEach(function(k){
     var s=db.sessoes[k];
     if(s.tipo!=='aula'){
@@ -196,17 +232,18 @@ function estatisticas(){
       return;
     }
     diasAula++;
-    Object.keys(s.presencas).forEach(function(aid){
-      var st=s.presencas[aid].status;
+    var pres=s.presencas||{};
+    Object.keys(pres).forEach(function(aid){
+      var st=pres[aid].status;
       if(st==='presente'){presencasTot++;ocasioesTot++;} else if(st==='falta'||st==='justificada'){ocasioesTot++;}
     });
   });
   db.turmas.forEach(function(t){
-    t.alunos.forEach(function(a){
+    (t.alunos||[]).forEach(function(a){
       var tot=0,pre=0;
       Object.keys(db.sessoes).forEach(function(k){
         if(k.split('|')[0]!==t.id) return; var s=db.sessoes[k]; if(s.tipo!=='aula') return;
-        var st=(s.presencas[a.id]||{}).status;
+        var st=((s.presencas||{})[a.id]||{}).status;
         if(st==='presente'){tot++;pre++;} else if(st==='falta'||st==='justificada'){tot++;}
       });
       alunos.push({nome:a.nome,turma:t.nome,pct: tot?Math.round(pre/tot*100):null});
@@ -219,6 +256,7 @@ function estatisticas(){
 
 /* ---------- TELA DA TURMA ---------- */
 function desenharTurma(turma, tela){
+  if(!turma.alunos) turma.alunos = [];
   var sessao=pegarSessao(turma.id, dataAtual);
   var fds=ehFimDeSemana(dataAtual);
 
@@ -248,7 +286,7 @@ function desenharTurma(turma, tela){
       '<input type="text" id="motivoDia" placeholder="'+(ehSem?'Ex.: falta de energia, greve, aula cancelada…':'Ex.: Dia da Independência')+'" value="'+esc(sessao.motivo)+'"></div>';
     tela.appendChild(caixa);
     var inp=caixa.querySelector('#motivoDia');
-    inp.addEventListener('input', function(){ var s=pegarSessao(turma.id,dataAtual); s.motivo=inp.value; db.sessoes[chaveSessao(turma.id,dataAtual)]=s; salvar(); });
+    inp.addEventListener('change', function(){ var s=pegarSessao(turma.id,dataAtual); s.motivo=inp.value; db.sessoes[chaveSessao(turma.id,dataAtual)]=s; salvarChamadas(); });
     return;
   }
 
@@ -319,7 +357,8 @@ function desenharTurma(turma, tela){
 }
 
 function cartaoAluno(turma, aluno, sessao){
-  var rec=sessao.presencas[aluno.id]||{}; var status=rec.status||null;
+  var pres=sessao.presencas||{};
+  var rec=pres[aluno.id]||{}; var status=rec.status||null;
   var card=document.createElement('div'); card.className='student'+(status?' '+status:'');
   var nome=document.createElement('div'); nome.className='st-name'; nome.innerHTML=esc(aluno.nome)+'<span class="dot"></span>'; card.appendChild(nome);
   var cy=document.createElement('button'); cy.className='st-cycle';
@@ -346,37 +385,39 @@ function cartaoAluno(turma, aluno, sessao){
 }
 
 function contar(turma, sessao){
-  var c={p:0,f:0,j:0};
-  turma.alunos.forEach(function(a){
-    var s=(sessao.presencas[a.id]||{}).status;
+  var c={p:0,f:0,j:0}; var pres=sessao.presencas||{};
+  (turma.alunos||[]).forEach(function(a){
+    var s=(pres[a.id]||{}).status;
     if(s==='presente')c.p++; else if(s==='falta')c.f++; else if(s==='justificada')c.j++;
   });
   return c;
 }
 
-/* ---------- AÇÕES ---------- */
+/* ---------- AÇÕES DE CHAMADA (todos podem) ---------- */
 function definirTipoDia(turmaId, tipo){
   var chave=chaveSessao(turmaId,dataAtual); var sessao=pegarSessao(turmaId,dataAtual);
-  sessao.tipo=tipo; db.sessoes[chave]=sessao; salvar(); desenhar();
+  sessao.tipo=tipo; db.sessoes[chave]=sessao; salvarChamadas();
 }
 function ciclar(turmaId, alunoId){
   var chave=chaveSessao(turmaId,dataAtual);
   var sessao=db.sessoes[chave]||{tipo:'aula',motivo:'',presencas:{},concluida:false};
+  if(!sessao.presencas) sessao.presencas={};
   var atual=(sessao.presencas[alunoId]||{}).status||null;
   var prox = atual===null?'presente':atual==='presente'?'justificada':atual==='justificada'?'falta':'presente';
   sessao.presencas[alunoId]={status:prox, motivo:(sessao.presencas[alunoId]||{}).motivo||''};
-  db.sessoes[chave]=sessao; salvar(); desenhar();
+  db.sessoes[chave]=sessao; salvarChamadas();
 }
 function limpar(turmaId, alunoId){
   var chave=chaveSessao(turmaId,dataAtual);
   var sessao=db.sessoes[chave]||{tipo:'aula',motivo:'',presencas:{},concluida:false};
-  delete sessao.presencas[alunoId]; db.sessoes[chave]=sessao; salvar(); desenhar();
+  if(sessao.presencas) delete sessao.presencas[alunoId];
+  db.sessoes[chave]=sessao; salvarChamadas();
 }
 function resetarTodos(turmaId){
   pedirConfirmacao('Resetar chamada do dia','Isso vai voltar todos os alunos ao estado neutro nesta data. A marcação deste dia será apagada.', function(){
     var chave=chaveSessao(turmaId,dataAtual);
     var sessao=db.sessoes[chave]||{tipo:'aula',motivo:'',presencas:{},concluida:false};
-    sessao.presencas={}; db.sessoes[chave]=sessao; salvar(); desenhar(); aviso('Chamada do dia zerada.');
+    sessao.presencas={}; db.sessoes[chave]=sessao; salvarChamadas(); aviso('Chamada do dia zerada.');
   }, 'Resetar');
 }
 function concluirChamada(turmaId){
@@ -384,50 +425,51 @@ function concluirChamada(turmaId){
   var chave=chaveSessao(turmaId,dataAtual);
   var sessao=db.sessoes[chave]||{tipo:'aula',motivo:'',presencas:{},concluida:false};
   var c=contar(turma, sessao);
-  var faltam=turma.alunos.length-(c.p+c.f+c.j);
-  if(turma.alunos.length===0){ aviso('Adicione alunos antes de concluir.'); return; }
+  var faltam=(turma.alunos||[]).length-(c.p+c.f+c.j);
+  if((turma.alunos||[]).length===0){ aviso('Adicione alunos antes de concluir.'); return; }
   if(faltam>0){ aviso('Ainda faltam '+faltam+' aluno(s) sem marcar.'); return; }
   pedirConfirmacao('Concluir chamada','Confirmar a chamada de '+turma.nome+' em '+dataBR(dataAtual)+'? Você poderá reabrir depois se precisar.', function(){
-    sessao.concluida=true; db.sessoes[chave]=sessao; salvar(); desenhar(); aviso('Chamada concluída! ✅');
+    sessao.concluida=true; db.sessoes[chave]=sessao; salvarChamadas(); aviso('Chamada concluída! ✅');
   }, 'Concluir');
 }
 function reabrirChamada(turmaId){
   var chave=chaveSessao(turmaId,dataAtual);
   var sessao=db.sessoes[chave]||{tipo:'aula',motivo:'',presencas:{},concluida:false};
-  sessao.concluida=false; db.sessoes[chave]=sessao; salvar(); desenhar();
+  sessao.concluida=false; db.sessoes[chave]=sessao; salvarChamadas();
 }
 function pedirMotivo(turmaId, alunoId){
   var chave=chaveSessao(turmaId,dataAtual);
   var sessao=db.sessoes[chave]||{tipo:'aula',motivo:'',presencas:{},concluida:false};
+  if(!sessao.presencas) sessao.presencas={};
   var rec=sessao.presencas[alunoId]||{status:'justificada',motivo:''};
   abrirModal('Motivo da justificativa','Por que a falta deste aluno foi justificada? (pode deixar em branco)', function(texto){
-    rec.status='justificada'; rec.motivo=texto; sessao.presencas[alunoId]=rec; db.sessoes[chave]=sessao; salvar(); desenhar();
+    rec.status='justificada'; rec.motivo=texto; sessao.presencas[alunoId]=rec; db.sessoes[chave]=sessao; salvarChamadas();
   }, rec.motivo);
 }
+
+/* ---------- AÇÕES DE ESTRUTURA (só professor logado) ---------- */
 function adicionarTurma(){
   if(!ehProfessor()) return;
   abrirModal('Nova turma','Dê um nome para a turma.', function(nome){
     if(!nome) return;
-    db.turmas.push({id:novoId(),nome:nome,alunos:[]}); salvar();
-    abaAtiva=db.turmas[db.turmas.length-1].id; desenhar(); aviso('Turma criada.');
+    db.turmas.push({id:novoId(),nome:nome,alunos:[]});
+    abaAtiva=db.turmas[db.turmas.length-1].id; salvarEstrutura(); aviso('Turma criada.');
   });
 }
-/* NOVO: renomear turma */
 function renomearTurma(turmaId){
   if(!ehProfessor()) return;
   var turma=db.turmas.find(function(t){return t.id===turmaId;});
   abrirModal('Renomear turma','Corrija o nome da turma.', function(nome){
     if(!nome) return;
-    turma.nome=nome; salvar(); desenhar(); aviso('Turma renomeada.');
+    turma.nome=nome; salvarEstrutura(); aviso('Turma renomeada.');
   }, turma.nome);
 }
 function excluirTurma(turmaId){
   if(!ehProfessor()) return;
   var turma=db.turmas.find(function(t){return t.id===turmaId;});
-  pedirConfirmacao('Excluir turma','A turma "'+turma.nome+'" e todos os seus registros serão apagados. Isso não pode ser desfeito.', function(){
+  pedirConfirmacao('Excluir turma','A turma "'+turma.nome+'" será apagada. As chamadas antigas dela deixam de aparecer. Isso não pode ser desfeito.', function(){
     db.turmas=db.turmas.filter(function(t){return t.id!==turmaId;});
-    Object.keys(db.sessoes).forEach(function(k){ if(k.split('|')[0]===turmaId) delete db.sessoes[k]; });
-    abaAtiva='painel'; salvar(); desenhar(); aviso('Turma excluída.');
+    abaAtiva='painel'; salvarEstrutura(); aviso('Turma excluída.');
   }, 'Excluir');
 }
 function adicionarAluno(turmaId){
@@ -435,17 +477,17 @@ function adicionarAluno(turmaId){
   abrirModal('Novo aluno','Nome do aluno.', function(nome){
     if(!nome) return;
     var turma=db.turmas.find(function(t){return t.id===turmaId;});
-    turma.alunos.push({id:novoId(),nome:nome}); salvar(); desenhar();
+    if(!turma.alunos) turma.alunos=[];
+    turma.alunos.push({id:novoId(),nome:nome}); salvarEstrutura();
   });
 }
-/* NOVO: renomear aluno */
 function renomearAluno(turmaId, alunoId){
   if(!ehProfessor()) return;
   var turma=db.turmas.find(function(t){return t.id===turmaId;});
   var aluno=turma.alunos.find(function(a){return a.id===alunoId;});
   abrirModal('Renomear aluno','Corrija o nome do aluno.', function(nome){
     if(!nome) return;
-    aluno.nome=nome; salvar(); desenhar(); aviso('Aluno renomeado.');
+    aluno.nome=nome; salvarEstrutura(); aviso('Aluno renomeado.');
   }, aluno.nome);
 }
 function removerAluno(turmaId, alunoId){
@@ -454,7 +496,7 @@ function removerAluno(turmaId, alunoId){
   var aluno=turma.alunos.find(function(a){return a.id===alunoId;});
   pedirConfirmacao('Remover aluno','Remover "'+aluno.nome+'" da turma? O histórico dele nos registros anteriores é mantido.', function(){
     turma.alunos=turma.alunos.filter(function(a){return a.id!==alunoId;});
-    salvar(); desenhar(); aviso('Aluno removido.');
+    salvarEstrutura(); aviso('Aluno removido.');
   }, 'Remover');
 }
 
@@ -468,19 +510,19 @@ function exportarExcel(){
       if(k.split('|')[0]!==t.id) return;
       var data=k.split('|')[1]; var s=db.sessoes[k];
       if(s.tipo!=='aula'){ registros.push([t.nome,dataBR(data),diaDaSemana(data),s.tipo==='feriado'?'Feriado':'Sem aula',s.motivo||'','(dia sem aula)','','','']); return; }
-      t.alunos.forEach(function(a){
-        var r=s.presencas[a.id]||{};
+      (t.alunos||[]).forEach(function(a){
+        var r=(s.presencas||{})[a.id]||{};
         registros.push([t.nome,dataBR(data),diaDaSemana(data),'Aula','',a.nome,traduz[r.status]||'Não registrado',r.motivo||'',s.concluida?'Sim':'Não']);
       });
     });
   });
   var resumo=[['Turma','Aluno','Dias de aula','Presenças','Faltas','Justificadas','% Presença']];
   db.turmas.forEach(function(t){
-    t.alunos.forEach(function(a){
+    (t.alunos||[]).forEach(function(a){
       var d=0,p=0,f=0,j=0;
       Object.keys(db.sessoes).forEach(function(k){
         if(k.split('|')[0]!==t.id) return; var s=db.sessoes[k]; if(s.tipo!=='aula') return;
-        var st=(s.presencas[a.id]||{}).status; if(!st) return; d++;
+        var st=((s.presencas||{})[a.id]||{}).status; if(!st) return; d++;
         if(st==='presente')p++; else if(st==='falta')f++; else if(st==='justificada')j++;
       });
       resumo.push([t.nome,a.nome,d,p,f,j,d?Math.round(p/d*100)+'%':'—']);
@@ -502,16 +544,13 @@ function exportarExcel(){
   aviso('Excel gerado! Confira sua pasta de downloads.');
 }
 function fazerBackup(){
-  var blob=new Blob([JSON.stringify(db,null,2)],{type:'application/json'});
+  var tudo={turmas:db.turmas,sessoes:db.sessoes};
+  var blob=new Blob([JSON.stringify(tudo,null,2)],{type:'application/json'});
   var link=document.createElement('a'); link.href=URL.createObjectURL(blob);
   link.download='backup-frequencia-'+hojeISO()+'.json'; link.click();
   aviso('Backup salvo. Guarde este arquivo em local seguro.');
 }
-function pedirSenhaBackup(){
-  abrirModal('Área protegida','Digite a senha para baixar o backup.', function(senha){
-    if(senha===SENHA_BACKUP){ fazerBackup(); } else{ aviso('Senha incorreta.'); }
-  }, '', true);
-}
+function pedirSenhaBackup(){ fazerBackup(); }   // só professor logado vê esse botão
 function restaurar(evento){
   var arquivo=evento.target.files[0]; if(!arquivo) return;
   var leitor=new FileReader();
@@ -519,8 +558,9 @@ function restaurar(evento){
     try{
       var dados=JSON.parse(leitor.result);
       if(!dados.turmas||!dados.sessoes) throw new Error('formato');
-      pedirConfirmacao('Restaurar backup','Isso vai substituir os dados atuais pelos do arquivo escolhido. Continuar?', function(){
-        db=dados; abaAtiva='painel'; salvar(); desenhar(); aviso('Backup restaurado com sucesso.');
+      pedirConfirmacao('Restaurar backup','Isso vai substituir os dados da NUVEM pelos do arquivo escolhido. Continuar?', function(){
+        db.turmas=dados.turmas; db.sessoes=dados.sessoes;
+        salvarEstrutura(); salvarChamadas(); aviso('Backup restaurado para a nuvem.');
       }, 'Restaurar');
     }catch(e){ aviso('Arquivo inválido. Selecione um backup .json gerado por este sistema.'); }
   };
@@ -533,3 +573,6 @@ aoTocar(document.getElementById('btnBackup'), pedirSenhaBackup);
 aoTocar(document.getElementById('btnRestaurar'), function(){ document.getElementById('arquivoRestaurar').click(); });
 document.getElementById('arquivoRestaurar').addEventListener('change', restaurar);
 aoTocar(document.getElementById('btnSair'), sair);
+
+/* ---------- LIGA A NUVEM ---------- */
+ligarSincronizacao();

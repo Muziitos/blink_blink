@@ -200,3 +200,8 @@ table.mini td{ padding:8px 10px; border-bottom:1px solid var(--panel) }
   .summary{ width:100%; margin-left:0 }
   .barrow{ grid-template-columns:110px 1fr 46px }
 }
+
+/* campo de e-mail no login (sem o botão de olho) */
+.campo-senha input[type=email]{ padding-right:16px }
+#loginSenha .campo{ margin-bottom:14px 
+}
