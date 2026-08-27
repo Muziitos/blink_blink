@@ -41,7 +41,12 @@
           <label>Senha</label>
           <div class="campo-senha">
             <input type="password" id="senhaProf" placeholder="Digite a senha" autocomplete="off">
-            <button type="button" id="verSenha" title="Mostrar/ocultar">👁️</button>
+            <button type="button" id="verSenha" title="Mostrar/ocultar senha" aria-label="Mostrar ou ocultar a senha">
+              <svg id="iconeOlho" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/>
+                <circle cx="12" cy="12" r="3"/>
+              </svg>
+            </button>
           </div>
         </div>
         <button class="btn-entrar" id="confirmaProf">Entrar</button>

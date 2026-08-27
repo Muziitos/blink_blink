@@ -76,7 +76,14 @@ aoTocar(document.getElementById('voltarLogin'), mostrarEscolha);
 aoTocar(document.getElementById('confirmaProf'), tentarProfessor);
 document.getElementById('senhaProf').addEventListener('keydown', function(e){ if(e.key==='Enter') tentarProfessor(); });
 document.getElementById('verSenha').addEventListener('click', function(){
-  var i=document.getElementById('senhaProf'); i.type = i.type==='password' ? 'text' : 'password';
+  var i = document.getElementById('senhaProf');
+  var mostrando = i.type === 'password';
+  i.type = mostrando ? 'text' : 'password';
+  // troca o desenho: olho aberto <-> olho cortado
+  var svg = document.getElementById('iconeOlho');
+  svg.innerHTML = mostrando
+    ? '<path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c6.5 0 10 8 10 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><path d="M1 1l22 22"/><path d="M6.61 6.61A13.5 13.5 0 0 0 2 12s3.5 8 10 8a9.7 9.7 0 0 0 5.39-1.61"/>'
+    : '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/>';
 });
 
 /* 4) MODAL DE TEXTO */
