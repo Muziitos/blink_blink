@@ -87,7 +87,7 @@ function abrirModal(titulo, texto, aoConfirmar, valorInicial, ehSenha){
   var input=document.getElementById('modalInput');
   input.value=valorInicial||''; input.type = ehSenha ? 'password' : 'text';
   acaoDoModal=aoConfirmar;
-  document.getElementById('modalFundo').classList.add('aberto'); input.focus();
+  document.getElementById('modalFundo').classList.add('aberto'); input.focus(); input.select();
 }
 function fecharModal(){ document.getElementById('modalFundo').classList.remove('aberto'); acaoDoModal=null; }
 function confirmarModal(){ var t=document.getElementById('modalInput').value.trim(); if(acaoDoModal){acaoDoModal(t);} fecharModal(); }
@@ -284,7 +284,9 @@ function desenharTurma(turma, tela){
     aoTocar(btnReset, function(){ resetarTodos(turma.id); }); linha.appendChild(btnReset);
   }
   if(ehProfessor()){
-    var btnDel=document.createElement('button'); btnDel.className='btn ghost sm'; btnDel.style.marginLeft='auto'; btnDel.textContent='Excluir turma';
+    var btnRen=document.createElement('button'); btnRen.className='btn sm'; btnRen.style.marginLeft='auto'; btnRen.textContent='✏️ Renomear turma';
+    aoTocar(btnRen, function(){ renomearTurma(turma.id); }); linha.appendChild(btnRen);
+    var btnDel=document.createElement('button'); btnDel.className='btn ghost sm'; btnDel.textContent='Excluir turma';
     aoTocar(btnDel, function(){ excluirTurma(turma.id); }); linha.appendChild(btnDel);
   }
   if(linha.children.length>0) painel.appendChild(linha);
@@ -327,6 +329,8 @@ function cartaoAluno(turma, aluno, sessao){
     aoTocar(bl, function(){ limpar(turma.id, aluno.id); }); foot.appendChild(bl);
   }
   if(ehProfessor()){
+    var bren=document.createElement('button'); bren.className='st-clear'; bren.textContent='✏️'; bren.title='Renomear aluno';
+    aoTocar(bren, function(){ renomearAluno(turma.id, aluno.id); }); foot.appendChild(bren);
     var bk=document.createElement('button'); bk.className='st-kill2'; bk.textContent='×'; bk.title='Remover aluno';
     aoTocar(bk, function(){ removerAluno(turma.id, aluno.id); }); foot.appendChild(bk);
   }
@@ -401,6 +405,15 @@ function adicionarTurma(){
     abaAtiva=db.turmas[db.turmas.length-1].id; desenhar(); aviso('Turma criada.');
   });
 }
+/* NOVO: renomear turma */
+function renomearTurma(turmaId){
+  if(!ehProfessor()) return;
+  var turma=db.turmas.find(function(t){return t.id===turmaId;});
+  abrirModal('Renomear turma','Corrija o nome da turma.', function(nome){
+    if(!nome) return;
+    turma.nome=nome; salvar(); desenhar(); aviso('Turma renomeada.');
+  }, turma.nome);
+}
 function excluirTurma(turmaId){
   if(!ehProfessor()) return;
   var turma=db.turmas.find(function(t){return t.id===turmaId;});
@@ -417,6 +430,16 @@ function adicionarAluno(turmaId){
     var turma=db.turmas.find(function(t){return t.id===turmaId;});
     turma.alunos.push({id:novoId(),nome:nome}); salvar(); desenhar();
   });
+}
+/* NOVO: renomear aluno */
+function renomearAluno(turmaId, alunoId){
+  if(!ehProfessor()) return;
+  var turma=db.turmas.find(function(t){return t.id===turmaId;});
+  var aluno=turma.alunos.find(function(a){return a.id===alunoId;});
+  abrirModal('Renomear aluno','Corrija o nome do aluno.', function(nome){
+    if(!nome) return;
+    aluno.nome=nome; salvar(); desenhar(); aviso('Aluno renomeado.');
+  }, aluno.nome);
 }
 function removerAluno(turmaId, alunoId){
   if(!ehProfessor()) return;
