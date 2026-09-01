@@ -1,5 +1,6 @@
 /* ============================================================
    BLINK.BLINK — CÉREBRO (Firebase: 2 gavetas + login real)
+   Ordenação alfabética dos alunos + botão de ordem no painel.
 ============================================================ */
 
 /* ---------- CONEXÃO ---------- */
@@ -14,21 +15,21 @@ var firebaseConfig = {
 };
 firebase.initializeApp(firebaseConfig);
 var auth = firebase.auth();
-var refEstrutura = firebase.database().ref('estrutura');   // turmas + alunos (só professor escreve)
-var refChamadas  = firebase.database().ref('chamadas');    // presenças (todos escrevem)
+var refEstrutura = firebase.database().ref('estrutura');
+var refChamadas  = firebase.database().ref('chamadas');
 
 var papel = null;
-var db = { turmas:[], sessoes:{} };   // "turmas" vem da estrutura; "sessoes" vem das chamadas
+var db = { turmas:[], sessoes:{} };
 var abaAtiva = 'painel';
 var dataAtual = hojeISO();
 var carregouEstrutura = false, carregouChamadas = false;
+var ordemPainel = 'freq';   // 'freq' = por quem falta mais | 'abc' = alfabética
 
-/* ---------- SALVAR / CARREGAR (nas 2 gavetas) ---------- */
-function salvarEstrutura(){ refEstrutura.set(db.turmas); }   // usado nas ações de professor
-function salvarChamadas(){ refChamadas.set(db.sessoes); }    // usado ao marcar presença
+/* ---------- SALVAR / CARREGAR ---------- */
+function salvarEstrutura(){ refEstrutura.set(db.turmas); }
+function salvarChamadas(){ refChamadas.set(db.sessoes); }
 
 function ligarSincronizacao(){
-  // gaveta 1: turmas e alunos
   refEstrutura.on('value', function(snap){
     var t = snap.val() || [];
     t = t.filter(function(x){ return x; });
@@ -41,7 +42,6 @@ function ligarSincronizacao(){
     if(papel) desenhar();
   }, function(){ aviso('Erro ao ler turmas da nuvem.'); });
 
-  // gaveta 2: chamadas / presenças
   refChamadas.on('value', function(snap){
     var s = snap.val() || {};
     Object.keys(s).forEach(function(k){ if(!s[k].presencas) s[k].presencas = {}; });
@@ -63,6 +63,12 @@ function esc(t){ return (t||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').repla
 function aviso(t){ var e=document.getElementById('toast'); e.textContent=t; e.classList.add('show'); clearTimeout(e.timer); e.timer=setTimeout(function(){e.classList.remove('show');},3500); }
 function aoTocar(el, fn){ if(!el) return; el.addEventListener('click', function(e){ e.preventDefault(); fn(); }); }
 function ehProfessor(){ return papel==='professor'; }
+/* ordena uma lista de alunos por nome, ignorando acentos e maiúsculas */
+function emOrdem(lista){
+  return (lista || []).slice().sort(function(a, b){
+    return (a.nome || '').localeCompare(b.nome || '', 'pt', { sensitivity:'base' });
+  });
+}
 function chaveSessao(t,d){ return t+'|'+d; }
 function pegarSessao(t,d){ return db.sessoes[chaveSessao(t,d)] || {tipo:'aula',motivo:'',presencas:{},concluida:false}; }
 
@@ -80,7 +86,7 @@ function entrarComo(novoPapel){
   abaAtiva='painel'; desenhar();
 }
 function sair(){
-  if(ehProfessor()) auth.signOut();   // desloga do Firebase
+  if(ehProfessor()) auth.signOut();
   papel=null; abaAtiva='painel';
   document.getElementById('app').style.display='none';
   document.getElementById('login').style.display='flex';
@@ -97,7 +103,6 @@ function mostrarSenha(){
   document.getElementById('loginSenha').style.display='block';
   document.getElementById('emailProf').focus();
 }
-/* agora o professor entra com login REAL do Firebase */
 function tentarProfessor(){
   var email = document.getElementById('emailProf').value.trim();
   var senha = document.getElementById('senhaProf').value;
@@ -191,11 +196,18 @@ function desenharPainel(tela){
   tela.appendChild(cards);
 
   var pf=document.createElement('div'); pf.className='panel';
-  pf.innerHTML='<div class="panel-title">Frequência por aluno</div>';
+  var rotuloOrdem = ordemPainel==='abc' ? '🔤 Ordem: A a Z' : '📉 Ordem: quem falta mais';
+  pf.innerHTML='<div class="panel-title" style="display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap">'+
+    '<span>Frequência por aluno</span>'+
+    '<button class="btn sm" id="btnOrdem" style="text-transform:none; letter-spacing:normal">'+rotuloOrdem+'</button></div>';
   if(est.alunos.length===0){ pf.innerHTML+='<p style="color:var(--muted);font-size:14px">Lance ao menos uma aula para ver as porcentagens.</p>'; }
   else{
+    var listaOrdenada = est.alunos.slice();
+    if(ordemPainel==='abc'){
+      listaOrdenada.sort(function(a,b){ return (a.nome||'').localeCompare(b.nome||'', 'pt', {sensitivity:'base'}); });
+    }
     var bars=document.createElement('div'); bars.className='bars';
-    est.alunos.forEach(function(a){
+    listaOrdenada.forEach(function(a){
       var pct=a.pct==null?0:a.pct; var row=document.createElement('div'); row.className='barrow';
       row.innerHTML='<div class="nm" title="'+esc(a.nome)+'">'+esc(a.nome)+' <small>'+esc(a.turma)+'</small></div>'+
         '<div class="track"><div class="fill'+(pct<75?' low':'')+'" style="width:'+pct+'%"></div></div>'+
@@ -205,6 +217,8 @@ function desenharPainel(tela){
     pf.appendChild(bars);
   }
   tela.appendChild(pf);
+  var botaoOrdem = document.getElementById('btnOrdem');
+  if(botaoOrdem) aoTocar(botaoOrdem, function(){ ordemPainel = ordemPainel==='abc' ? 'freq' : 'abc'; desenhar(); });
 
   var pd=document.createElement('div'); pd.className='panel';
   pd.innerHTML='<div class="panel-title">Dias sem aula (feriados e cancelamentos)</div>';
@@ -239,7 +253,7 @@ function estatisticas(){
     });
   });
   db.turmas.forEach(function(t){
-    (t.alunos||[]).forEach(function(a){
+    emOrdem(t.alunos).forEach(function(a){
       var tot=0,pre=0;
       Object.keys(db.sessoes).forEach(function(k){
         if(k.split('|')[0]!==t.id) return; var s=db.sessoes[k]; if(s.tipo!=='aula') return;
@@ -315,7 +329,7 @@ function desenharTurma(turma, tela){
     painel.innerHTML+='<div class="empty" style="padding:30px"><h3>Nenhum aluno ainda</h3><p>'+(ehProfessor()?'Adicione os alunos abaixo.':'Peça a um professor para adicionar os alunos.')+'</p></div>';
   }else{
     var grade=document.createElement('div'); grade.className='roster';
-    turma.alunos.forEach(function(al){ grade.appendChild(cartaoAluno(turma, al, sessao)); });
+    emOrdem(turma.alunos).forEach(function(al){ grade.appendChild(cartaoAluno(turma, al, sessao)); });
     painel.appendChild(grade);
   }
 
@@ -510,7 +524,7 @@ function exportarExcel(){
       if(k.split('|')[0]!==t.id) return;
       var data=k.split('|')[1]; var s=db.sessoes[k];
       if(s.tipo!=='aula'){ registros.push([t.nome,dataBR(data),diaDaSemana(data),s.tipo==='feriado'?'Feriado':'Sem aula',s.motivo||'','(dia sem aula)','','','']); return; }
-      (t.alunos||[]).forEach(function(a){
+      emOrdem(t.alunos).forEach(function(a){
         var r=(s.presencas||{})[a.id]||{};
         registros.push([t.nome,dataBR(data),diaDaSemana(data),'Aula','',a.nome,traduz[r.status]||'Não registrado',r.motivo||'',s.concluida?'Sim':'Não']);
       });
@@ -518,7 +532,7 @@ function exportarExcel(){
   });
   var resumo=[['Turma','Aluno','Dias de aula','Presenças','Faltas','Justificadas','% Presença']];
   db.turmas.forEach(function(t){
-    (t.alunos||[]).forEach(function(a){
+    emOrdem(t.alunos).forEach(function(a){
       var d=0,p=0,f=0,j=0;
       Object.keys(db.sessoes).forEach(function(k){
         if(k.split('|')[0]!==t.id) return; var s=db.sessoes[k]; if(s.tipo!=='aula') return;
@@ -550,7 +564,7 @@ function fazerBackup(){
   link.download='backup-frequencia-'+hojeISO()+'.json'; link.click();
   aviso('Backup salvo. Guarde este arquivo em local seguro.');
 }
-function pedirSenhaBackup(){ fazerBackup(); }   // só professor logado vê esse botão
+function pedirSenhaBackup(){ fazerBackup(); }
 function restaurar(evento){
   var arquivo=evento.target.files[0]; if(!arquivo) return;
   var leitor=new FileReader();
