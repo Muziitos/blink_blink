@@ -1,5 +1,5 @@
 /* ============================================================
-   BLINK.BLINK — CÉREBRO (Firebase) + Fichas de alunos + Vinculação
+   BLINK.BLINK — CÉREBRO (Firebase) + Fichas + Estrelas/Raios em pontas
 ============================================================ */
 
 /* ---------- CONEXÃO ---------- */
@@ -246,6 +246,7 @@ function desenharAbas(){
   var barra=document.getElementById('tabs'); barra.innerHTML='';
   barra.appendChild(criarAba('painel','📊 Painel'));
   if(ehProfessor()) barra.appendChild(criarAba('alunos','👥 Alunos'));
+  barra.appendChild(criarAba('estrelas','🌟 Estrelas e Raios'));
   db.turmas.forEach(function(t){ barra.appendChild(criarAba(t.id, esc(t.nome)+' <span class="count">'+t.alunos.length+'</span>')); });
   if(ehProfessor()){
     var add=document.createElement('button'); add.className='tab tab-add'; add.textContent='+ Turma';
@@ -264,9 +265,154 @@ function desenhar(){
   if(!carregouEstrutura || !carregouChamadas){ tela.innerHTML='<div class="panel" style="text-align:center;color:var(--muted)">Carregando dados da nuvem…</div>'; return; }
   if(abaAtiva==='painel'){ desenharPainel(tela); return; }
   if(abaAtiva==='alunos'){ if(ehProfessor()) desenharAlunos(tela); else { abaAtiva='painel'; desenhar(); } return; }
+  if(abaAtiva==='estrelas'){ desenharEstrelas(tela); return; }
   var turma=db.turmas.find(function(t){ return t.id===abaAtiva; });
   if(!turma){ abaAtiva='painel'; return desenhar(); }
   desenharTurma(turma, tela);
+}
+
+/* ---------- ESTRELAS E RAIOS ---------- */
+var ESTRELA_PEDACOS = 5;
+var RAIO_PEDACOS = 3;
+
+function ajustarEstrela(turmaId, alunoId, delta){
+  if(!ehProfessor()) return;
+  var turma=db.turmas.find(function(t){return t.id===turmaId;});
+  var aluno=turma.alunos.find(function(a){return a.id===alunoId;});
+  var v=(aluno.estrelas||0)+delta; if(v<0) v=0;
+  aluno.estrelas=v; salvarEstrutura();
+}
+function ajustarRaio(turmaId, alunoId, delta){
+  if(!ehProfessor()) return;
+  var turma=db.turmas.find(function(t){return t.id===turmaId;});
+  var aluno=turma.alunos.find(function(a){return a.id===alunoId;});
+  var v=(aluno.raios||0)+delta; if(v<0) v=0;
+  aluno.raios=v; salvarEstrutura();
+}
+/* pontas da estrela (5 peças) + contorno */
+var ESTRELA_PONTAS = [
+  "M12.00 12.00 L9.30 8.28 L12.00 1.50 L14.70 8.28 Z",
+  "M12.00 12.00 L14.70 8.28 L21.99 8.76 L16.37 13.42 Z",
+  "M12.00 12.00 L16.37 13.42 L18.17 20.49 L12.00 16.60 Z",
+  "M12.00 12.00 L12.00 16.60 L5.83 20.49 L7.63 13.42 Z",
+  "M12.00 12.00 L7.63 13.42 L2.01 8.76 L9.30 8.28 Z"
+];
+var ESTRELA_CONTORNO = "M12.00 1.50 L14.70 8.28 L21.99 8.76 L16.37 13.42 L18.17 20.49 L12.00 16.60 L5.83 20.49 L7.63 13.42 L2.01 8.76 L9.30 8.28 Z";
+var PATH_RAIO = "M17.65 1.00 L9.95 1.15 L6.69 10.16 L9.31 10.80 L6.56 15.48 L8.77 16.19 L6.35 23.00 L14.89 14.89 L12.82 13.99 L17.27 8.75 L14.27 7.94 Z";
+var RAIO_FAIXAS = [[15.67,23.0],[8.33,15.67],[1.0,8.33]]; // de baixo p/ cima
+
+function svgEstrela(acesas){
+  var s='<svg width="30" height="30" viewBox="0 0 24 24" style="vertical-align:middle">';
+  for(var i=0;i<5;i++){
+    var cor = i<acesas ? '#fbbf24' : '#e2e8f0';
+    s+='<path d="'+ESTRELA_PONTAS[i]+'" fill="'+cor+'"/>';
+  }
+  s+='<path d="'+ESTRELA_CONTORNO+'" fill="none" stroke="#cbd5e1" stroke-width="1" stroke-linejoin="round"/></svg>';
+  return s;
+}
+function svgRaio(acesas){
+  var uid = Math.random().toString(36).slice(2,7);
+  var s='<svg width="30" height="30" viewBox="0 0 24 24" style="vertical-align:middle"><defs>';
+  for(var i=0;i<3;i++){
+    var top=RAIO_FAIXAS[i][0], bot=RAIO_FAIXAS[i][1];
+    s+='<clipPath id="clp'+uid+i+'"><rect x="0" y="'+top+'" width="24" height="'+(bot-top)+'"/></clipPath>';
+  }
+  s+='</defs>';
+  for(var j=0;j<3;j++){
+    var cor = j<acesas ? '#f59e0b' : '#e2e8f0';
+    s+='<path d="'+PATH_RAIO+'" fill="'+cor+'" clip-path="url(#clp'+uid+j+')"/>';
+  }
+  s+='<path d="'+PATH_RAIO+'" fill="none" stroke="#cbd5e1" stroke-width="1" stroke-linejoin="round"/></svg>';
+  return s;
+}
+function desenhoPecas(total, porInteiro, tipo){
+  var inteiras = Math.floor(total/porInteiro);
+  var resto = total%porInteiro;
+  var umCheio = (tipo==='raio') ? svgRaio(porInteiro) : svgEstrela(porInteiro);
+  var s='';
+  if(inteiras>0){
+    s += umCheio + '<span style="font-weight:700;color:var(--slate);font-size:14px;margin:0 6px 0 1px">x'+inteiras+'</span>';
+  }
+  s += (tipo==='raio') ? svgRaio(resto) : svgEstrela(resto);
+  return s;
+}
+function textoPecas(total, porInteiro, nomeInt, nomePed){
+  var inteiros=Math.floor(total/porInteiro), resto=total%porInteiro;
+  var partes=[];
+  if(inteiros>0) partes.push(inteiros+' '+nomeInt+(inteiros>1?'s':''));
+  if(resto>0) partes.push(resto+' '+nomePed+(resto>1?'s':''));
+  return partes.length? partes.join(' e ') : '0';
+}
+
+function desenharEstrelas(tela){
+  var totalGeral=0; db.turmas.forEach(function(t){ totalGeral+=(t.alunos||[]).length; });
+
+  var topo=document.createElement('div'); topo.className='panel';
+  topo.innerHTML='<div class="panel-title">Estrelas e Raios</div>'+
+    '<p style="font-size:13px;color:var(--muted);margin:0">🌟 1 estrela = 5 pontas · ⚡ 1 raio = 3 partes. '+
+    (ehProfessor()?'Use os botões para adicionar ou tirar.':'Aqui você vê as estrelas e raios de cada aluno.')+'</p>';
+  tela.appendChild(topo);
+
+  if(totalGeral===0){
+    var e=document.createElement('div'); e.className='panel';
+    e.innerHTML='<div class="empty" style="padding:26px"><h3>Nenhum aluno ainda</h3><p>Adicione alunos nas turmas para dar estrelas e raios.</p></div>';
+    tela.appendChild(e); return;
+  }
+
+  db.turmas.forEach(function(t){
+    if(!(t.alunos||[]).length) return;
+    var sec=document.createElement('div'); sec.className='panel';
+    sec.innerHTML='<div class="panel-title">'+esc(t.nome)+' <span class="count">'+t.alunos.length+'</span></div>';
+    var grade=document.createElement('div'); grade.className='sr-grid';
+    emOrdem(t.alunos).forEach(function(a){
+      grade.appendChild(cartaoEstrela(t, a));
+    });
+    sec.appendChild(grade);
+    tela.appendChild(sec);
+  });
+}
+
+function cartaoEstrela(turma, aluno){
+  var estrelas=aluno.estrelas||0, raios=aluno.raios||0;
+  var card=document.createElement('div'); card.className='sr-card';
+  var nomeMostrar = aluno.nomeCompleto || aluno.nome;
+
+  var html='<div class="sr-nome">'+esc(nomeMostrar)+'</div>';
+  html+='<div class="sr-linha"><span class="sr-vis">'+desenhoPecas(estrelas,ESTRELA_PEDACOS,'estrela')+'</span>'+
+        '<span class="sr-num">'+textoPecas(estrelas,ESTRELA_PEDACOS,'estrela','ponta')+'</span></div>';
+  html+='<div class="sr-linha"><span class="sr-vis">'+desenhoPecas(raios,RAIO_PEDACOS,'raio')+'</span>'+
+        '<span class="sr-num">'+textoPecas(raios,RAIO_PEDACOS,'raio','parte')+'</span></div>';
+  card.innerHTML=html;
+
+  if(ehProfessor()){
+    var ctrl=document.createElement('div'); ctrl.className='sr-ctrl';
+    ctrl.innerHTML=
+      '<div class="sr-row"><span>🌟</span>'+
+        '<button class="sr-b" data-k="ep-">− ponta</button>'+
+        '<button class="sr-b" data-k="ep+">+ ponta</button>'+
+        '<button class="sr-b forte" data-k="ei-">− estrela</button>'+
+        '<button class="sr-b forte" data-k="ei+">+ estrela</button></div>'+
+      '<div class="sr-row"><span>⚡</span>'+
+        '<button class="sr-b" data-k="rp-">− parte</button>'+
+        '<button class="sr-b" data-k="rp+">+ parte</button>'+
+        '<button class="sr-b forte" data-k="ri-">− raio</button>'+
+        '<button class="sr-b forte" data-k="ri+">+ raio</button></div>';
+    card.appendChild(ctrl);
+    ctrl.querySelectorAll('button.sr-b').forEach(function(b){
+      aoTocar(b, function(){
+        var k=b.getAttribute('data-k');
+        if(k==='ep+') ajustarEstrela(turma.id,aluno.id,1);
+        else if(k==='ep-') ajustarEstrela(turma.id,aluno.id,-1);
+        else if(k==='ei+') ajustarEstrela(turma.id,aluno.id,ESTRELA_PEDACOS);
+        else if(k==='ei-') ajustarEstrela(turma.id,aluno.id,-ESTRELA_PEDACOS);
+        else if(k==='rp+') ajustarRaio(turma.id,aluno.id,1);
+        else if(k==='rp-') ajustarRaio(turma.id,aluno.id,-1);
+        else if(k==='ri+') ajustarRaio(turma.id,aluno.id,RAIO_PEDACOS);
+        else if(k==='ri-') ajustarRaio(turma.id,aluno.id,-RAIO_PEDACOS);
+      });
+    });
+  }
+  return card;
 }
 
 /* ---------- ABA ALUNOS (só professor) ---------- */
@@ -730,7 +876,7 @@ function exportarExcel(){
       });
     });
   });
-  var resumo=[['Turma','Aluno','Nome completo','Dias de aula','Presenças','Faltas','Justificadas','% Presença']];
+  var resumo=[['Turma','Aluno','Nome completo','Dias de aula','Presenças','Faltas','Justificadas','% Presença','Estrelas (pedaços)','Raios (pedaços)']];
   db.turmas.forEach(function(t){
     emOrdem(t.alunos).forEach(function(a){
       var d=0,p=0,f=0,j=0;
@@ -739,7 +885,7 @@ function exportarExcel(){
         var st=((s.presencas||{})[a.id]||{}).status; if(!st) return; d++;
         if(st==='presente')p++; else if(st==='falta')f++; else if(st==='justificada')j++;
       });
-      resumo.push([t.nome,a.nome,a.nomeCompleto||'',d,p,f,j,d?Math.round(p/d*100)+'%':'—']);
+      resumo.push([t.nome,a.nome,a.nomeCompleto||'',d,p,f,j,d?Math.round(p/d*100)+'%':'—',a.estrelas||0,a.raios||0]);
     });
   });
   var dias=[['Turma','Data','Dia da semana','Tipo','Motivo']];

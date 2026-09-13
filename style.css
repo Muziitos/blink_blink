@@ -223,3 +223,18 @@ table.mini td{ padding:8px 10px; border-bottom:1px solid var(--panel) }
 .ficha-item:hover{ border-color:var(--brand2); background:var(--brand-soft) }
 .ficha-item b{ font-size:14px; color:var(--ink) }
 .ficha-item small{ font-size:12px; color:var(--muted); margin-top:2px }
+
+/* ---------- ESTRELAS E RAIOS ---------- */
+.sr-grid{ display:grid; gap:12px; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)) }
+.sr-card{ border:1px solid var(--line); border-radius:12px; padding:14px; background:var(--surface) }
+.sr-nome{ font-weight:600; font-size:15px; margin-bottom:10px; color:var(--ink) }
+.sr-linha{ display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:6px }
+.sr-vis{ font-size:18px; line-height:1.2 }
+.sr-num{ font-size:12px; color:var(--muted); font-weight:600; text-align:right }
+.sr-ctrl{ margin-top:12px; padding-top:12px; border-top:1px solid var(--line); display:flex; flex-direction:column; gap:7px }
+.sr-row{ display:flex; align-items:center; gap:5px; flex-wrap:wrap }
+.sr-row > span{ width:22px; font-size:16px; flex:none }
+.sr-b{ border:1px solid var(--line); background:var(--surface); color:var(--slate); padding:5px 8px; border-radius:7px; font-size:11.5px; font-weight:600; font-family:inherit; cursor:pointer }
+.sr-b:hover{ border-color:var(--brand2); color:var(--brand) }
+.sr-b.forte{ background:var(--brand-soft); border-color:var(--brand-soft); color:var(--brand) }
+.sr-b.forte:hover{ background:var(--brand); color:#fff }
