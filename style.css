@@ -205,3 +205,21 @@ table.mini td{ padding:8px 10px; border-bottom:1px solid var(--panel) }
 .campo-senha input[type=email]{ padding-right:16px }
 #loginSenha .campo{ margin-bottom:14px 
 }
+
+/* ---------- FICHA DO ALUNO (campos do modal) ---------- */
+#fichaFundo .campo{ text-align:left; margin-bottom:12px }
+#fichaFundo .campo label{ display:block; font-size:12.5px; font-weight:600; color:var(--muted); margin-bottom:5px }
+#fichaFundo .campo input{ width:100%; font-family:inherit; font-size:15px; padding:10px 12px; border:1px solid var(--line); border-radius:9px; margin:0 }
+#fichaFundo .campo input:focus{ outline:2px solid var(--brand2); border-color:transparent }
+
+/* ---------- FICHA DO ALUNO (campos do modal) ---------- */
+#fichaFundo .campo{ text-align:left; margin-bottom:12px }
+#fichaFundo .campo label{ display:block; font-size:12.5px; font-weight:600; color:var(--muted); margin-bottom:5px }
+#fichaFundo .campo input{ width:100%; font-family:inherit; font-size:15px; padding:10px 12px; border:1px solid var(--line); border-radius:9px; margin:0 }
+#fichaFundo .campo input:focus{ outline:2px solid var(--brand2); border-color:transparent }
+
+/* ---------- LISTA DE FICHAS (modal de vincular) ---------- */
+.ficha-item{ display:flex; flex-direction:column; align-items:flex-start; text-align:left; width:100%; border:1px solid var(--line); background:var(--surface); border-radius:10px; padding:10px 13px; cursor:pointer }
+.ficha-item:hover{ border-color:var(--brand2); background:var(--brand-soft) }
+.ficha-item b{ font-size:14px; color:var(--ink) }
+.ficha-item small{ font-size:12px; color:var(--muted); margin-top:2px }

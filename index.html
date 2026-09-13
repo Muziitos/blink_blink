@@ -83,6 +83,7 @@
         <button class="head-btn" id="btnRestaurar">Restaurar</button>
         <button class="head-btn" id="btnSair">Sair</button>
         <input type="file" id="arquivoRestaurar" accept=".json" style="display:none">
+        <input type="file" id="arquivoCSV" accept=".csv" style="display:none">
       </div>
     </header>
 
@@ -116,6 +117,36 @@
       <div class="modal-botoes">
         <button class="btn" onclick="fecharConfirmacao()">Cancelar</button>
         <button class="btn primary" id="confOk" onclick="confirmarAcao()">Confirmar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL DE FICHA (editar aluno vinculado) -->
+  <div class="modal-fundo" id="fichaFundo">
+    <div class="modal">
+      <h3>Ficha do aluno</h3>
+      <p id="fichaNome" style="font-weight:600;color:var(--ink);font-size:14px;margin-bottom:16px"></p>
+      <div class="campo"><label>Nome completo</label><input type="text" id="fCompleto" autocomplete="off"></div>
+      <div class="campo"><label>Escola</label><input type="text" id="fEscola" autocomplete="off"></div>
+      <div class="campo"><label>Série</label><input type="text" id="fSerie" autocomplete="off"></div>
+      <div class="campo"><label>Turno</label><input type="text" id="fTurno" autocomplete="off"></div>
+      <div class="campo"><label>Sexo</label><input type="text" id="fSexo" autocomplete="off"></div>
+      <div class="modal-botoes">
+        <button class="btn" onclick="fecharFicha()">Cancelar</button>
+        <button class="btn primary" onclick="salvarFicha()">Salvar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL DE VINCULAR FICHA (com busca) -->
+  <div class="modal-fundo" id="vincFundo">
+    <div class="modal" style="max-width:460px">
+      <h3>Vincular ficha</h3>
+      <p id="vincAluno" style="font-size:13px;color:var(--muted);margin:4px 0 14px"></p>
+      <input type="text" id="vincBusca" placeholder="🔍 Buscar por nome…" autocomplete="off">
+      <div id="vincLista" style="max-height:320px; overflow-y:auto; margin-top:12px; display:flex; flex-direction:column; gap:6px"></div>
+      <div class="modal-botoes" style="margin-top:16px">
+        <button class="btn" onclick="fecharVinc()">Fechar</button>
       </div>
     </div>
   </div>

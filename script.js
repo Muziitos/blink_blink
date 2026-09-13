@@ -1,6 +1,5 @@
 /* ============================================================
-   BLINK.BLINK — CÉREBRO (Firebase: 2 gavetas + login real)
-   Ordenação alfabética dos alunos + botão de ordem no painel.
+   BLINK.BLINK — CÉREBRO (Firebase) + Fichas de alunos + Vinculação
 ============================================================ */
 
 /* ---------- CONEXÃO ---------- */
@@ -19,25 +18,30 @@ var refEstrutura = firebase.database().ref('estrutura');
 var refChamadas  = firebase.database().ref('chamadas');
 
 var papel = null;
-var db = { turmas:[], sessoes:{} };
+var db = { turmas:[], sessoes:{}, fichas:[] };
 var abaAtiva = 'painel';
 var dataAtual = hojeISO();
 var carregouEstrutura = false, carregouChamadas = false;
-var ordemPainel = 'freq';   // 'freq' = por quem falta mais | 'abc' = alfabética
+var ordemPainel = 'freq';
 
 /* ---------- SALVAR / CARREGAR ---------- */
-function salvarEstrutura(){ refEstrutura.set(db.turmas); }
+function salvarEstrutura(){ refEstrutura.set({ turmas: db.turmas, fichas: db.fichas }); }
 function salvarChamadas(){ refChamadas.set(db.sessoes); }
 
 function ligarSincronizacao(){
   refEstrutura.on('value', function(snap){
-    var t = snap.val() || [];
-    t = t.filter(function(x){ return x; });
-    t.forEach(function(turma){
-      if(!turma.alunos) turma.alunos = [];
-      turma.alunos = turma.alunos.filter(function(a){ return a; });
+    var v = snap.val();
+    var turmas, fichas;
+    if(Array.isArray(v)){ turmas = v; fichas = []; }
+    else if(v && typeof v === 'object'){ turmas = v.turmas || []; fichas = v.fichas || []; }
+    else { turmas = []; fichas = []; }
+    turmas = turmas.filter(function(x){ return x; });
+    turmas.forEach(function(t){
+      if(!t.alunos) t.alunos = [];
+      t.alunos = t.alunos.filter(function(a){ return a; });
     });
-    db.turmas = t;
+    db.turmas = turmas;
+    db.fichas = (fichas||[]).filter(function(x){ return x; });
     carregouEstrutura = true;
     if(papel) desenhar();
   }, function(){ aviso('Erro ao ler turmas da nuvem.'); });
@@ -60,10 +64,14 @@ function diaNumero(iso){ return new Date(iso+'T12:00:00').getDay(); }
 function diaDaSemana(iso){ return DIAS[diaNumero(iso)]; }
 function ehFimDeSemana(iso){ var d=diaNumero(iso); return d===0 || d===6; }
 function esc(t){ return (t||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-function aviso(t){ var e=document.getElementById('toast'); e.textContent=t; e.classList.add('show'); clearTimeout(e.timer); e.timer=setTimeout(function(){e.classList.remove('show');},3500); }
+function aviso(t){ var e=document.getElementById('toast'); e.textContent=t; e.classList.add('show'); clearTimeout(e.timer); e.timer=setTimeout(function(){e.classList.remove('show');},4000); }
 function aoTocar(el, fn){ if(!el) return; el.addEventListener('click', function(e){ e.preventDefault(); fn(); }); }
 function ehProfessor(){ return papel==='professor'; }
-/* ordena uma lista de alunos por nome, ignorando acentos e maiúsculas */
+function normNome(s){
+  s=(s||'').toString().toLowerCase().trim();
+  s=s.normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  return s.replace(/\s+/g,' ');
+}
 function emOrdem(lista){
   return (lista || []).slice().sort(function(a, b){
     return (a.nome || '').localeCompare(b.nome || '', 'pt', { sensitivity:'base' });
@@ -152,10 +160,92 @@ function pedirConfirmacao(titulo, texto, aoConfirmar, textoBotao){
 function fecharConfirmacao(){ document.getElementById('confFundo').classList.remove('aberto'); acaoConfirmar=null; }
 function confirmarAcao(){ var fn=acaoConfirmar; fecharConfirmacao(); if(fn) fn(); }
 
+/* ---------- MODAL DE FICHA (editar aluno vinculado) ---------- */
+var fichaAlvo=null;
+function abrirFicha(turmaId, alunoId){
+  var turma=db.turmas.find(function(t){return t.id===turmaId;});
+  var aluno=turma.alunos.find(function(a){return a.id===alunoId;});
+  fichaAlvo={turmaId:turmaId, alunoId:alunoId};
+  document.getElementById('fichaNome').textContent = aluno.nome + '  ·  ' + turma.nome;
+  document.getElementById('fCompleto').value = aluno.nomeCompleto || '';
+  document.getElementById('fEscola').value = aluno.escola || '';
+  document.getElementById('fSerie').value  = aluno.serie  || '';
+  document.getElementById('fTurno').value  = aluno.turno  || '';
+  document.getElementById('fSexo').value   = aluno.sexo   || '';
+  document.getElementById('fichaFundo').classList.add('aberto');
+}
+function fecharFicha(){ document.getElementById('fichaFundo').classList.remove('aberto'); fichaAlvo=null; }
+function salvarFicha(){
+  if(!ehProfessor() || !fichaAlvo) return;
+  var turma=db.turmas.find(function(t){return t.id===fichaAlvo.turmaId;});
+  var aluno=turma.alunos.find(function(a){return a.id===fichaAlvo.alunoId;});
+  aluno.nomeCompleto=document.getElementById('fCompleto').value.trim();
+  aluno.escola=document.getElementById('fEscola').value.trim();
+  aluno.serie =document.getElementById('fSerie').value.trim();
+  aluno.turno =document.getElementById('fTurno').value.trim();
+  aluno.sexo  =document.getElementById('fSexo').value.trim();
+  fecharFicha(); salvarEstrutura(); aviso('Ficha atualizada.');
+}
+
+/* ---------- MODAL DE VINCULAR FICHA ---------- */
+var vincAlvo=null;
+function abrirVinc(turmaId, alunoId){
+  var turma=db.turmas.find(function(t){return t.id===turmaId;});
+  var aluno=turma.alunos.find(function(a){return a.id===alunoId;});
+  vincAlvo={turmaId:turmaId, alunoId:alunoId};
+  document.getElementById('vincAluno').textContent = 'Escolha a ficha de: '+aluno.nome+' ('+turma.nome+')';
+  document.getElementById('vincBusca').value='';
+  document.getElementById('vincFundo').classList.add('aberto');
+  desenharListaFichas('');
+  document.getElementById('vincBusca').focus();
+}
+function fecharVinc(){ document.getElementById('vincFundo').classList.remove('aberto'); vincAlvo=null; }
+function desenharListaFichas(filtro){
+  var lista=document.getElementById('vincLista');
+  var disp = db.fichas.filter(function(f){ return !f.usada; });
+  var nf = normNome(filtro);
+  if(nf) disp = disp.filter(function(f){ return normNome(f.nome).indexOf(nf)!==-1; });
+  disp.sort(function(a,b){ return (a.nome||'').localeCompare(b.nome||'', 'pt', {sensitivity:'base'}); });
+  if(disp.length===0){
+    lista.innerHTML='<p style="color:var(--muted);font-size:13.5px;padding:10px 4px">Nenhuma ficha disponível'+(nf?' com esse nome':'')+'. Importe o CSV primeiro.</p>';
+    return;
+  }
+  lista.innerHTML='';
+  disp.forEach(function(f){
+    var b=document.createElement('button');
+    b.className='ficha-item';
+    b.innerHTML='<b>'+esc(f.nome)+'</b><small>'+esc(f.escola||'—')+' · '+esc(f.serie||'—')+' · '+esc(f.turno||'—')+'</small>';
+    aoTocar(b, function(){ escolherFicha(f.id); });
+    lista.appendChild(b);
+  });
+}
+document.getElementById('vincBusca').addEventListener('input', function(e){ desenharListaFichas(e.target.value); });
+function escolherFicha(fichaId){
+  if(!ehProfessor() || !vincAlvo) return;
+  var f=db.fichas.find(function(x){return x.id===fichaId;});
+  var turma=db.turmas.find(function(t){return t.id===vincAlvo.turmaId;});
+  var aluno=turma.alunos.find(function(a){return a.id===vincAlvo.alunoId;});
+  aluno.nomeCompleto=f.nome; aluno.escola=f.escola; aluno.serie=f.serie; aluno.turno=f.turno; aluno.sexo=f.sexo;
+  aluno.fichaId=f.id;
+  f.usada=true;
+  fecharVinc(); salvarEstrutura(); aviso('Ficha vinculada a '+aluno.nome+'.');
+}
+function desvincular(turmaId, alunoId){
+  if(!ehProfessor()) return;
+  var turma=db.turmas.find(function(t){return t.id===turmaId;});
+  var aluno=turma.alunos.find(function(a){return a.id===alunoId;});
+  pedirConfirmacao('Desvincular ficha','A ficha de "'+(aluno.nomeCompleto||aluno.nome)+'" volta para as disponíveis e os dados dele saem daqui (o nome curto na chamada continua). Continuar?', function(){
+    if(aluno.fichaId){ var f=db.fichas.find(function(x){return x.id===aluno.fichaId;}); if(f) f.usada=false; }
+    delete aluno.nomeCompleto; delete aluno.escola; delete aluno.serie; delete aluno.turno; delete aluno.sexo; delete aluno.fichaId;
+    salvarEstrutura(); aviso('Ficha desvinculada.');
+  }, 'Desvincular');
+}
+
 /* ---------- ABAS ---------- */
 function desenharAbas(){
   var barra=document.getElementById('tabs'); barra.innerHTML='';
   barra.appendChild(criarAba('painel','📊 Painel'));
+  if(ehProfessor()) barra.appendChild(criarAba('alunos','👥 Alunos'));
   db.turmas.forEach(function(t){ barra.appendChild(criarAba(t.id, esc(t.nome)+' <span class="count">'+t.alunos.length+'</span>')); });
   if(ehProfessor()){
     var add=document.createElement('button'); add.className='tab tab-add'; add.textContent='+ Turma';
@@ -173,9 +263,120 @@ function desenhar(){
   var tela=document.getElementById('view'); tela.innerHTML='';
   if(!carregouEstrutura || !carregouChamadas){ tela.innerHTML='<div class="panel" style="text-align:center;color:var(--muted)">Carregando dados da nuvem…</div>'; return; }
   if(abaAtiva==='painel'){ desenharPainel(tela); return; }
+  if(abaAtiva==='alunos'){ if(ehProfessor()) desenharAlunos(tela); else { abaAtiva='painel'; desenhar(); } return; }
   var turma=db.turmas.find(function(t){ return t.id===abaAtiva; });
   if(!turma){ abaAtiva='painel'; return desenhar(); }
   desenharTurma(turma, tela);
+}
+
+/* ---------- ABA ALUNOS (só professor) ---------- */
+function desenharAlunos(tela){
+  var totalGeral=0; db.turmas.forEach(function(t){ totalGeral+=(t.alunos||[]).length; });
+  var dispon = db.fichas.filter(function(f){ return !f.usada; }).length;
+
+  var p=document.createElement('div'); p.className='panel';
+  p.innerHTML='<div class="panel-title" style="display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap">'+
+    '<span>Alunos ('+totalGeral+')</span>'+
+    '<button class="btn primary sm" id="btnImportar" style="text-transform:none; letter-spacing:normal">⬆️ Importar planilha (CSV)</button></div>'+
+    '<p style="font-size:13px;color:var(--muted);margin:0 0 4px"><b>'+dispon+'</b> ficha(s) disponível(is) para vincular. Toque em <b>📋 Vincular</b> no aluno e escolha a ficha dele.</p>';
+  tela.appendChild(p);
+  ligarBotaoImportar();
+
+  if(totalGeral===0){
+    var e=document.createElement('div'); e.className='panel';
+    e.innerHTML='<div class="empty" style="padding:26px"><h3>Nenhum aluno cadastrado</h3><p>Crie as turmas e adicione os alunos (nome curto). Depois importe o CSV e vincule cada ficha.</p></div>';
+    tela.appendChild(e);
+    return;
+  }
+
+  db.turmas.forEach(function(t){
+    if(!(t.alunos||[]).length) return;
+    var sec=document.createElement('div'); sec.className='panel';
+    sec.innerHTML='<div class="panel-title">'+esc(t.nome)+' <span class="count">'+t.alunos.length+'</span></div>';
+    var tbl='<table class="mini"><thead><tr><th>Aluno</th><th>Escola</th><th>Série</th><th>Turno</th><th>Sexo</th><th></th></tr></thead><tbody>';
+    emOrdem(t.alunos).forEach(function(a){
+      var vinc = !!a.nomeCompleto;
+      var nomeCol = vinc
+        ? '<b>'+esc(a.nomeCompleto)+'</b><br><small style="color:var(--faint)">chamada: '+esc(a.nome)+'</small>'
+        : '<b>'+esc(a.nome)+'</b><br><small style="color:var(--just)">sem ficha</small>';
+      var acao = vinc
+        ? '<button class="btn sm ed" data-t="'+t.id+'" data-a="'+a.id+'" style="padding:4px 9px">✏️</button> <button class="btn ghost sm dv" data-t="'+t.id+'" data-a="'+a.id+'" style="padding:4px 8px">🔗</button>'
+        : '<button class="btn primary sm vl" data-t="'+t.id+'" data-a="'+a.id+'" style="padding:5px 10px; text-transform:none; letter-spacing:normal">📋 Vincular</button>';
+      tbl+='<tr>'+
+        '<td>'+nomeCol+'</td>'+
+        '<td>'+(esc(a.escola)||'<span style="color:var(--faint)">—</span>')+'</td>'+
+        '<td>'+(esc(a.serie)||'<span style="color:var(--faint)">—</span>')+'</td>'+
+        '<td>'+(esc(a.turno)||'<span style="color:var(--faint)">—</span>')+'</td>'+
+        '<td>'+(esc(a.sexo)||'<span style="color:var(--faint)">—</span>')+'</td>'+
+        '<td style="white-space:nowrap">'+acao+'</td>'+
+        '</tr>';
+    });
+    tbl+='</tbody></table>';
+    var wrap=document.createElement('div'); wrap.style.overflowX='auto'; wrap.innerHTML=tbl;
+    sec.appendChild(wrap);
+    tela.appendChild(sec);
+    wrap.querySelectorAll('button.vl').forEach(function(b){ aoTocar(b, function(){ abrirVinc(b.getAttribute('data-t'), b.getAttribute('data-a')); }); });
+    wrap.querySelectorAll('button.ed').forEach(function(b){ aoTocar(b, function(){ abrirFicha(b.getAttribute('data-t'), b.getAttribute('data-a')); }); });
+    wrap.querySelectorAll('button.dv').forEach(function(b){ aoTocar(b, function(){ desvincular(b.getAttribute('data-t'), b.getAttribute('data-a')); }); });
+  });
+
+  var dica=document.createElement('p'); dica.className='hint';
+  dica.innerHTML='A chamada usa o nome curto; aqui aparece o nome completo da ficha vinculada. Dados sensíveis (endereço, telefone, condições) ficam só no seu Obsidian. O 🔗 desvincula e devolve a ficha às disponíveis.';
+  tela.appendChild(dica);
+}
+function ligarBotaoImportar(){
+  var b=document.getElementById('btnImportar');
+  if(b) aoTocar(b, function(){ document.getElementById('arquivoCSV').click(); });
+}
+
+/* ---------- IMPORTAÇÃO DE CSV → prateleira de fichas ---------- */
+function importarCSV(evento){
+  if(!ehProfessor()) return;
+  var f=evento.target.files[0]; if(!f) return;
+  var leitor=new FileReader();
+  leitor.onload=function(){
+    try{
+      var wb=XLSX.read(leitor.result, {type:'string'});
+      var sheet=wb.Sheets[wb.SheetNames[0]];
+      var linhas=XLSX.utils.sheet_to_json(sheet, {defval:''});
+      pedirConfirmacao('Importar fichas',
+        'Vou ler '+linhas.length+' linha(s) e guardar como fichas disponíveis (nome, escola, série, turno, sexo). Endereço/telefone/CPF são ignorados. Continuar?',
+        function(){ processarImport(linhas); }, 'Importar');
+    }catch(e){ aviso('Não consegui ler o arquivo. Confira se é um CSV válido.'); }
+  };
+  leitor.readAsText(f, 'UTF-8');
+  evento.target.value='';
+}
+function pegaCampo(row, nomes){
+  var chaves=Object.keys(row);
+  for(var i=0;i<nomes.length;i++){
+    for(var j=0;j<chaves.length;j++){
+      if(normNome(chaves[j]).indexOf(normNome(nomes[i]))!==-1) return String(row[chaves[j]]).trim();
+    }
+  }
+  return '';
+}
+function processarImport(linhas){
+  var novas=0, repetidas=0;
+  linhas.forEach(function(row){
+    var nome = pegaCampo(row, ['Nome do Aluno','Nome Completo do Aluno','Nome']);
+    if(!nome) return;
+    var cn=normNome(nome);
+    if(db.fichas.some(function(f){ return normNome(f.nome)===cn; })){ repetidas++; return; }
+    db.fichas.push({
+      id: novoId(),
+      nome: nome,
+      escola: pegaCampo(row, ['Escola']),
+      serie:  pegaCampo(row, ['Série','Serie']),
+      turno:  pegaCampo(row, ['Turno']),
+      sexo:   pegaCampo(row, ['Sexo']),
+      usada: false
+    });
+    novas++;
+  });
+  salvarEstrutura();
+  abaAtiva='alunos'; desenhar();
+  aviso('Importação: '+novas+' ficha(s) nova(s)'+(repetidas?', '+repetidas+' já existiam.':'.'));
 }
 
 /* ---------- PAINEL ---------- */
@@ -203,9 +404,7 @@ function desenharPainel(tela){
   if(est.alunos.length===0){ pf.innerHTML+='<p style="color:var(--muted);font-size:14px">Lance ao menos uma aula para ver as porcentagens.</p>'; }
   else{
     var listaOrdenada = est.alunos.slice();
-    if(ordemPainel==='abc'){
-      listaOrdenada.sort(function(a,b){ return (a.nome||'').localeCompare(b.nome||'', 'pt', {sensitivity:'base'}); });
-    }
+    if(ordemPainel==='abc'){ listaOrdenada.sort(function(a,b){ return (a.nome||'').localeCompare(b.nome||'', 'pt', {sensitivity:'base'}); }); }
     var bars=document.createElement('div'); bars.className='bars';
     listaOrdenada.forEach(function(a){
       var pct=a.pct==null?0:a.pct; var row=document.createElement('div'); row.className='barrow';
@@ -488,7 +687,7 @@ function excluirTurma(turmaId){
 }
 function adicionarAluno(turmaId){
   if(!ehProfessor()) return;
-  abrirModal('Novo aluno','Nome do aluno.', function(nome){
+  abrirModal('Novo aluno','Nome curto (o que aparece na chamada).', function(nome){
     if(!nome) return;
     var turma=db.turmas.find(function(t){return t.id===turmaId;});
     if(!turma.alunos) turma.alunos=[];
@@ -499,7 +698,7 @@ function renomearAluno(turmaId, alunoId){
   if(!ehProfessor()) return;
   var turma=db.turmas.find(function(t){return t.id===turmaId;});
   var aluno=turma.alunos.find(function(a){return a.id===alunoId;});
-  abrirModal('Renomear aluno','Corrija o nome do aluno.', function(nome){
+  abrirModal('Renomear aluno','Nome curto (o que aparece na chamada).', function(nome){
     if(!nome) return;
     aluno.nome=nome; salvarEstrutura(); aviso('Aluno renomeado.');
   }, aluno.nome);
@@ -508,7 +707,8 @@ function removerAluno(turmaId, alunoId){
   if(!ehProfessor()) return;
   var turma=db.turmas.find(function(t){return t.id===turmaId;});
   var aluno=turma.alunos.find(function(a){return a.id===alunoId;});
-  pedirConfirmacao('Remover aluno','Remover "'+aluno.nome+'" da turma? O histórico dele nos registros anteriores é mantido.', function(){
+  pedirConfirmacao('Remover aluno','Remover "'+aluno.nome+'" da turma? Se tiver ficha vinculada, ela volta às disponíveis.', function(){
+    if(aluno.fichaId){ var f=db.fichas.find(function(x){return x.id===aluno.fichaId;}); if(f) f.usada=false; }
     turma.alunos=turma.alunos.filter(function(a){return a.id!==alunoId;});
     salvarEstrutura(); aviso('Aluno removido.');
   }, 'Remover');
@@ -518,19 +718,19 @@ function removerAluno(turmaId, alunoId){
 function exportarExcel(){
   if(typeof XLSX==='undefined'){ aviso('A biblioteca do Excel não carregou (precisa de internet).'); return; }
   var traduz={presente:'Presente',falta:'Falta',justificada:'Falta justificada'};
-  var registros=[['Turma','Data','Dia da semana','Tipo do dia','Motivo do dia','Aluno','Situação','Justificativa','Chamada concluída']];
+  var registros=[['Turma','Data','Dia da semana','Tipo do dia','Motivo do dia','Aluno','Nome completo','Situação','Justificativa','Chamada concluída']];
   db.turmas.forEach(function(t){
     Object.keys(db.sessoes).forEach(function(k){
       if(k.split('|')[0]!==t.id) return;
       var data=k.split('|')[1]; var s=db.sessoes[k];
-      if(s.tipo!=='aula'){ registros.push([t.nome,dataBR(data),diaDaSemana(data),s.tipo==='feriado'?'Feriado':'Sem aula',s.motivo||'','(dia sem aula)','','','']); return; }
+      if(s.tipo!=='aula'){ registros.push([t.nome,dataBR(data),diaDaSemana(data),s.tipo==='feriado'?'Feriado':'Sem aula',s.motivo||'','(dia sem aula)','','','','']); return; }
       emOrdem(t.alunos).forEach(function(a){
         var r=(s.presencas||{})[a.id]||{};
-        registros.push([t.nome,dataBR(data),diaDaSemana(data),'Aula','',a.nome,traduz[r.status]||'Não registrado',r.motivo||'',s.concluida?'Sim':'Não']);
+        registros.push([t.nome,dataBR(data),diaDaSemana(data),'Aula','',a.nome,a.nomeCompleto||'',traduz[r.status]||'Não registrado',r.motivo||'',s.concluida?'Sim':'Não']);
       });
     });
   });
-  var resumo=[['Turma','Aluno','Dias de aula','Presenças','Faltas','Justificadas','% Presença']];
+  var resumo=[['Turma','Aluno','Nome completo','Dias de aula','Presenças','Faltas','Justificadas','% Presença']];
   db.turmas.forEach(function(t){
     emOrdem(t.alunos).forEach(function(a){
       var d=0,p=0,f=0,j=0;
@@ -539,7 +739,7 @@ function exportarExcel(){
         var st=((s.presencas||{})[a.id]||{}).status; if(!st) return; d++;
         if(st==='presente')p++; else if(st==='falta')f++; else if(st==='justificada')j++;
       });
-      resumo.push([t.nome,a.nome,d,p,f,j,d?Math.round(p/d*100)+'%':'—']);
+      resumo.push([t.nome,a.nome,a.nomeCompleto||'',d,p,f,j,d?Math.round(p/d*100)+'%':'—']);
     });
   });
   var dias=[['Turma','Data','Dia da semana','Tipo','Motivo']];
@@ -558,7 +758,7 @@ function exportarExcel(){
   aviso('Excel gerado! Confira sua pasta de downloads.');
 }
 function fazerBackup(){
-  var tudo={turmas:db.turmas,sessoes:db.sessoes};
+  var tudo={turmas:db.turmas,sessoes:db.sessoes,fichas:db.fichas};
   var blob=new Blob([JSON.stringify(tudo,null,2)],{type:'application/json'});
   var link=document.createElement('a'); link.href=URL.createObjectURL(blob);
   link.download='backup-frequencia-'+hojeISO()+'.json'; link.click();
@@ -573,7 +773,7 @@ function restaurar(evento){
       var dados=JSON.parse(leitor.result);
       if(!dados.turmas||!dados.sessoes) throw new Error('formato');
       pedirConfirmacao('Restaurar backup','Isso vai substituir os dados da NUVEM pelos do arquivo escolhido. Continuar?', function(){
-        db.turmas=dados.turmas; db.sessoes=dados.sessoes;
+        db.turmas=dados.turmas; db.sessoes=dados.sessoes; db.fichas=dados.fichas||[];
         salvarEstrutura(); salvarChamadas(); aviso('Backup restaurado para a nuvem.');
       }, 'Restaurar');
     }catch(e){ aviso('Arquivo inválido. Selecione um backup .json gerado por este sistema.'); }
@@ -586,6 +786,7 @@ aoTocar(document.getElementById('btnExcel'), exportarExcel);
 aoTocar(document.getElementById('btnBackup'), pedirSenhaBackup);
 aoTocar(document.getElementById('btnRestaurar'), function(){ document.getElementById('arquivoRestaurar').click(); });
 document.getElementById('arquivoRestaurar').addEventListener('change', restaurar);
+document.getElementById('arquivoCSV').addEventListener('change', importarCSV);
 aoTocar(document.getElementById('btnSair'), sair);
 
 /* ---------- LIGA A NUVEM ---------- */
